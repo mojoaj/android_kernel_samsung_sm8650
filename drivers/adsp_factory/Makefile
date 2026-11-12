@@ -11,3 +11,5 @@ adsp_factory_module-$(CONFIG_LSM6DSL_FACTORY) += lsm6dsl_accel.o lsm6dsl_gyro.o
 adsp_factory_module-$(CONFIG_SUPPORT_AK09973) += ak09973_digital_hall.o
 adsp_factory_module-$(CONFIG_FLIP_COVER_DETECTOR_FACTORY) += flip_cover_detector.o
 adsp_factory_module-$(CONFIG_BACKTAP_FACTORY) += back_tap.o
+# q6q: sensor_dump_show uses ~2.4KB of stack with dual-6axis/sub-sensor configs (stock builds with FRAME_WARN=0)
+CFLAGS_ssc_core.o += -Wframe-larger-than=3072
