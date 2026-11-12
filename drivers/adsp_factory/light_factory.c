@@ -541,6 +541,10 @@ int light_panel_data_notify(struct notifier_block *nb,
 		adsp_unicast(msg_buf, sizeof(msg_buf),
 			light_idx, 0, MSG_TYPE_OPTION_DEFINE);
 		mutex_unlock(&data->light_factory_mutex);
+#if IS_ENABLED(CONFIG_SUPPORT_DEVICE_MODE) && IS_ENABLED(CONFIG_SUPPORT_VIRTUAL_OPTIC)
+		if (display_idx == 0 && panel_state == 1)
+			ssc_voptic_inner_panel_on();
+#endif
 	} else if (val == PANEL_EVENT_TEST_MODE_STATE_CHANGED) {
 		int32_t test_state = (int32_t)state - PANEL_EVENT_TEST_MODE_STATE_NONE;
 		int32_t msg_buf[3];
