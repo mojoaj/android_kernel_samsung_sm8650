@@ -355,11 +355,11 @@ static int max77775_port_type_set(struct typec_port *port, enum typec_port_type 
 		usbpd_data->typec_power_role, usbpd_data->typec_data_role, port_type);
 
 	reinit_completion(&usbpd_data->typec_reverse_completion);
-	if (port_type == TYPEC_PORT_SRC) {
+	if (port_type == TYPEC_PORT_DFP) {
 		msg_maxim("try reversing, from UFP(Sink) to DFP(Source)");
 		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_TYPE;
 		max77775_rprd_mode_change(usbpd_data, TYPE_C_ATTACH_DFP);
-	} else if (port_type == TYPEC_PORT_SNK) {
+	} else if (port_type == TYPEC_PORT_UFP) {
 		msg_maxim("try reversing, from DFP(Source) to UFP(Sink)");
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
 		max77775_ccic_event_work(usbpd_data,
@@ -3052,24 +3052,6 @@ void max77775_send_check_stuck_opcode(struct max77775_usbc_platform_data *usbpd_
 	read_data.opcode = OPCODE_BCCTRL1_R;
 	max77775_usbc_opcode_read(usbpd_data, &read_data);
 }
-
-void max77775_chg_check_stuck(int chgin_dtls)
-{
-	u8 vbdet;
-
-	struct max77775_usbc_platform_data *usbc_data = g_usbc_data;
-
-	max77775_read_reg(usbc_data->muic, MAX77775_USBC_REG_BC_STATUS, &vbdet);
-	vbdet = ((vbdet & 0x80) >> 7);
-	msg_maxim("vbdet %d, chgin_dtls %d", vbdet, chgin_dtls);
-
-	if ((vbdet == 0x00 && chgin_dtls == 0x03)
-		|| (vbdet == 0x01 && (chgin_dtls == 0x00 || chgin_dtls == 0x01 || chgin_dtls == 0x02))) {
-		msg_maxim("%s stuck suppose.", __func__);
-		max77775_send_check_stuck_opcode(usbc_data);
-	}
-}
-EXPORT_SYMBOL(max77775_chg_check_stuck);
 
 static irqreturn_t max77775_apcmd_irq(int irq, void *data)
 {

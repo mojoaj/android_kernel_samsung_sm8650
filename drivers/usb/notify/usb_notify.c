@@ -762,7 +762,6 @@ int do_notify_blockstate(struct otg_notify *n, unsigned long event,
 	case NOTIFY_EVENT_VBUS:
 #ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
 		if (enable && (u_notify->lock_state == USB_NOTIFY_LOCK_USB_RESTRICT)) {
-			msleep(200);
 			if (check_time_secure_restrict_cond(u_notify, event))
 				send_usb_restrict_uevent(USB_TIME_SECURE_RESTRICTED);
 		}

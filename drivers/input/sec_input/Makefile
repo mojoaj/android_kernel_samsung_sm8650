@@ -1,6 +1,8 @@
 TARGET = sec_common_fn
+TESTTARGET = sec_input_test
 
-$(TARGET)-objs := sec_input.o sec_cmd.o
+$(TARGET)-objs := sec_input.o sec_input_irq.o sec_input_report.o \
+                  sec_input_stui.o sec_input_ic_setting.o sec_input_parsedt.o sec_cmd.o
 
 ifneq ($(filter y m, $(CONFIG_SEC_DEBUG_TSP_LOG)),)
   $(TARGET)-objs += sec_tsp_log.o
@@ -30,11 +32,20 @@ obj-$(CONFIG_INPUT_SEC_INPUT) += $(TARGET).o
 obj-$(CONFIG_INPUT_SEC_NOTIFIER) += sec_input_notifier.o
 
 ifeq ($(CONFIG_SEC_KUNIT), y)
+ifeq ($(CONFIG_UML), y)
+  obj-$(CONFIG_INPUT_SEC_INPUT) += $(TESTTARGET).o
+else
+endif
 endif
 
 ccflags-y += -Wformat
 
 GCOV_PROFILE_sec_input.o := $(CONFIG_SEC_KUNIT)
+GCOV_PROFILE_sec_input_report.o := $(CONFIG_SEC_KUNIT)
+GCOV_PROFILE_sec_input_irq.o := $(CONFIG_SEC_KUNIT)
+GCOV_PROFILE_sec_input_stui.o := $(CONFIG_SEC_KUNIT)
+GCOV_PROFILE_sec_input_ic_setting.o := $(CONFIG_SEC_KUNIT)
+GCOV_PROFILE_sec_input_parsedt.o := $(CONFIG_SEC_KUNIT)
 GCOV_PROFILE_sec_cmd.o := $(CONFIG_SEC_KUNIT)
 GCOV_PROFILE_sec_tsp_log.o := $(CONFIG_SEC_KUNIT)
 GCOV_PROFILE_sec_tclm_v2.o := $(CONFIG_SEC_KUNIT)

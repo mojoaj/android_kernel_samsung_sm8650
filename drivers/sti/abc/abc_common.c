@@ -56,7 +56,6 @@ EXPORT_SYMBOL_KUNIT(abc_hub_kunit_test_uevent_str);
 struct registered_abc_event_struct abc_event_list[] = {
 	{"audio", "spk_amp", "it", true, true, 0, ABC_GROUP_NONE},
 	{"audio", "spk_amp_short", "it", true, true, 0, ABC_GROUP_NONE},
-	{"battery", "dc_batt_ov", "it", true, true, 0, ABC_GROUP_NONE},
 	{"battery", "dc_i2c_fail", "it", true, true, 0, ABC_GROUP_NONE},
 	{"battery", "over_voltage", "it", true, true, 0, ABC_GROUP_NONE},
 	{"battery", "pd_input_ocp", "it", true, true, 0, ABC_GROUP_NONE},

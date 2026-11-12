@@ -102,8 +102,7 @@ ssize_t max77775_chg_store_attrs(struct device *dev,
 #define MAX77775_DETBAT_SHIFT           2
 
 /* MAX77775_CHG_REG_CHG_DTLS_00 */
-#define MAX77775_BATP_DTLS		0x01
-#define MAX77775_BATP_DTLS_SHIFT	0
+#define MAX77775_SYS_REG_OK				0x01
 #define MAX77775_WCIN_DTLS		0x18
 #define MAX77775_WCIN_DTLS_SHIFT	3
 #define MAX77775_CHGIN_DTLS             0x60
@@ -129,25 +128,10 @@ ssize_t max77775_chg_store_attrs(struct device *dev,
 /* MAX77775_CHG_REG_CHG_CNFG_00 */
 #define CHG_CNFG_00_MODE_SHIFT		        0
 #define CHG_CNFG_00_CHG_SHIFT		        0
-#define CHG_CNFG_00_UNO_SHIFT		        1
-#define CHG_CNFG_00_OTG_SHIFT		        1
-#define CHG_CNFG_00_BUCK_SHIFT		        2
-#define CHG_CNFG_00_BOOST_SHIFT		        3
 #define CHG_CNFG_00_WDTEN_SHIFT		        4
 #define CHG_CNFG_00_MODE_MASK		        (0x0F << CHG_CNFG_00_MODE_SHIFT)
 #define CHG_CNFG_00_CHG_MASK		        (1 << CHG_CNFG_00_CHG_SHIFT)
-#define CHG_CNFG_00_UNO_MASK		        (1 << CHG_CNFG_00_UNO_SHIFT)
-#define CHG_CNFG_00_OTG_MASK		        (1 << CHG_CNFG_00_OTG_SHIFT)
-#define CHG_CNFG_00_BUCK_MASK		        (1 << CHG_CNFG_00_BUCK_SHIFT)
-#define CHG_CNFG_00_BOOST_MASK		        (1 << CHG_CNFG_00_BOOST_SHIFT)
 #define CHG_CNFG_00_WDTEN_MASK		        (1 << CHG_CNFG_00_WDTEN_SHIFT)
-#define CHG_CNFG_00_UNO_CTRL			(CHG_CNFG_00_UNO_MASK | CHG_CNFG_00_BOOST_MASK)
-#define CHG_CNFG_00_OTG_CTRL			(CHG_CNFG_00_OTG_MASK | CHG_CNFG_00_BOOST_MASK)
-#define MAX77775_MODE_DEFAULT			0x04
-#define MAX77775_MODE_CHGR			0x01
-#define MAX77775_MODE_UNO			0x01
-#define MAX77775_MODE_OTG			0x02
-#define MAX77775_MODE_BUCK			0x04
 #define MAX77775_MODE_BOOST			0x08
 #endif
 #define CHG_CNFG_00_SPSN_DET_EN_SHIFT		7
@@ -157,13 +141,12 @@ ssize_t max77775_chg_store_attrs(struct device *dev,
 
 /* MAX77775_CHG_REG_CHG_CNFG_00 MODE[3:0] */
 #define MAX77775_MODE_0_ALL_OFF						0x0
-#define MAX77775_MODE_1_ALL_OFF						0x1
-#define MAX77775_MODE_2_ALL_OFF						0x2
-#define MAX77775_MODE_3_ALL_OFF						0x3
+#define MAX77775_MODE_1_BUCK_OFF_LINEAR_CHG_ON		0x1
+#define MAX77775_MODE_2_BUCK_LINEAR_CHG_ON_BOOST_UNO_ON	0x2
+#define MAX77775_MODE_3_BUCK_LINEAR_CHG_ON_BOOST_OTG_ON 0x3
 #define MAX77775_MODE_4_BUCK_ON						0x4
 #define MAX77775_MODE_5_BUCK_CHG_ON					0x5
-#define MAX77775_MODE_6_BUCK_CHG_ON					0x6
-#define MAX77775_MODE_7_BUCK_ON						0x7
+#define MAX77775_MODE_7_BUCK_LINEAR_CHG_ON			0x7
 #define MAX77775_MODE_8_BOOST_UNO_ON				0x8
 #define MAX77775_MODE_9_BOOST_ON					0x9
 #define MAX77775_MODE_A_BOOST_OTG_ON				0xA
@@ -314,7 +297,21 @@ ssize_t max77775_chg_store_attrs(struct device *dev,
 #define CHG_CNFG_13_BYPASS_AUTOSHIP_EN_MASK		(0x1 << CHG_CNFG_13_BYPASS_AUTOSHIP_EN_SHIFT)
 #define CHG_CNFG_13_SHIP_ENTRY_DB_MASK			0x3
 
+/* MAX77775_CHG_REG_CHG_CNFG_16 */
+#define CHG_CNFG_16_REBALANCE_DIS_SHIFT		7
+#define CHG_CNFG_16_REBALANCE_DIS_MASK		(0x1 << CHG_CNFG_16_REBALANCE_DIS_SHIFT)
+#define CHG_CNFG_16_BATTPROT_EN_SHIFT		6
+#define CHG_CNFG_16_BATTPROT_EN_MASK		(0x1 << CHG_CNFG_16_BATTPROT_EN_SHIFT)
+#define CHG_CNFG_16_VTRACK_SHIFT			1
+#define CHG_CNFG_16_VTRACK_MASK				(0x1F << CHG_CNFG_16_VTRACK_SHIFT)
+#define CHG_CNFG_16_EXT_SYS_SHIFT			0
+#define CHG_CNFG_16_EXT_SYS_MASK			(0x1 << CHG_CNFG_16_EXT_SYS_SHIFT)
+
 /* MAX77775_CHG_REG_CHG_CNFG_17 */
+#define CHG_CNFG_17_EN_CTP_BAT_PROT_SHIFT		4
+#define CHG_CNFG_17_EN_CTP_BAT_PROT_MASK		(0x1 << CHG_CNFG_17_EN_CTP_BAT_PROT_SHIFT)
+#define CHG_CNFG_17_BATTPROT_WR_EN_SHIFT		1
+#define CHG_CNFG_17_BATTPROT_WR_EN_MASK		(0x1 << CHG_CNFG_17_BATTPROT_WR_EN_SHIFT)
 #define CHG_CNFG_17_BYPASS_MODE_WR_EN_SHIFT		0
 #define CHG_CNFG_17_BYPASS_MODE_WR_EN_MASK		(0x1 << CHG_CNFG_17_BYPASS_MODE_WR_EN_SHIFT)
 
@@ -351,6 +348,11 @@ typedef struct max77775_charger_platform_data {
 	bool enable_dpm;
 	int disqbat;
 	int dpm_icl;
+	bool icl_tolerance_wa;
+#ifdef CONFIG_IFPMIC_LIMITER
+	int default_vtrack_voltage;
+	int vtrack_rs;
+#endif
 
 	/* OVP/UVLO check */
 	int ovp_uvlo_check_type;
@@ -359,6 +361,7 @@ typedef struct max77775_charger_platform_data {
 	/* 2nd full check */
 	int full_check_type_2nd;
 
+	bool dis_ctp_bat_prot;
 } max77775_charger_platform_data_t;
 
 struct max77775_charger_data {
@@ -378,7 +381,6 @@ struct max77775_charger_data {
 	struct delayed_work	isr_work;
 	struct delayed_work wc_current_work;
 	struct delayed_work wc_chg_current_work;
-	struct delayed_work chgin_work;
 #if defined(CONFIG_USE_POGO)
 	struct delayed_work	wcin_det_work;
 #endif
@@ -387,6 +389,7 @@ struct max77775_charger_data {
 	/* mutex */
 	struct mutex            charger_mutex;
 	struct mutex            mode_mutex;
+	struct mutex            insel_mutex;
 	struct mutex            icl_mutex;
 	struct mutex            irq_aicl_mutex;
 
@@ -406,7 +409,6 @@ struct max77775_charger_data {
 	unsigned int	input_current;
 	unsigned int	charging_current;
 	unsigned int	vbus_state;
-	unsigned int	chgin_dtls;
 	int		aicl_curr;
 	bool	slow_charging;
 	int		status;
@@ -447,6 +449,8 @@ struct max77775_charger_data {
 	bool cv_mode_check;
 	int ari_cnt;
 	bool spcom;
+	bool wdt_test;
+	bool pr_swap;
 
 	max77775_charger_platform_data_t *pdata;
 };

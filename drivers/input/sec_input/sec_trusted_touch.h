@@ -28,7 +28,6 @@
 #include <linux/kobject.h>
 #include <linux/sort.h>
 
-#include <linux/vbus_notifier.h>
 #define TRUSTED_TOUCH_MEM_LABEL 0x7
 enum trusted_touch_mode_config {
 	TRUSTED_TOUCH_VM_MODE,
@@ -112,6 +111,8 @@ struct sec_trusted_touch {
 	atomic_t trusted_touch_abort_status;
 	atomic_t delayed_vm_probe_pending;
 	atomic_t trusted_touch_mode;
+	int (*pre_func)(struct device *dev, int mode);
+	int (*post_func)(struct device *dev, int mode);
 };
 int sec_trusted_touch_init(struct device *dev);
 #else

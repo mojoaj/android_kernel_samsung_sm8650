@@ -107,6 +107,11 @@ void sec_input_check_fold_status(struct sec_input_multi_device *mdev, bool flip_
 			flip_changed ? "changed to " : "",
 			(mdev->flip_status_current == FOLD_STATUS_FOLDING) ? "" : "un");
 
+	if (plat_data->prox_power_off) {
+		plat_data->prox_power_off = 0;
+		input_info(true, mdev->dev, "%s: clear prox_power_off\n", __func__);
+	}
+
 	switch (mdev->device_count) {
 	case MULTI_DEV_MAIN:
 		if (flip_changed) {

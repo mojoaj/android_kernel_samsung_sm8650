@@ -30,11 +30,7 @@
 
 #define MFC_NU1668_DRIVER_VERSION			0x001E
 
-#define MFC_FW_BIN_VERSION					0x0328
-
-#define MFC_FLASH_FW_HEX_PATH               "mfc/mfc_fw_flash.bin"
 #define MFC_FW_SDCARD_BIN_PATH              "wpc_fw_sdcard.bin"
-
 #define MFC_FLASH_FW_HEX_NU1668_PATH        "mfc/mfc_fw_flash_nu1668.bin"
 
 /* for SPU FW update */
@@ -531,48 +527,6 @@
 #define TX_AFC_SET_19V			0x04
 #define TX_AFC_SET_20V			0x05
 #define TX_AFC_SET_24V			0x06
-
-/* value of WPC_TX_COM_TX_ID(0x01) */
-#define TX_ID_UNKNOWN				0x00
-#define TX_ID_SNGL_PORT_START		0x01
-#define TX_ID_VEHICLE_PAD			0x11
-#define TX_ID_PG950_D_PAD			0x14
-#define TX_ID_P1100_PAD				0x16
-#define TX_ID_P1300_PAD			0x17
-#define TX_ID_P2400_PAD_NOAUTH			0x18
-#define TX_ID_SNGL_PORT_END			0x1F
-#define TX_ID_MULTI_PORT_START		0x20
-#define TX_ID_P4300_PAD			0x25
-#define TX_ID_P5400_PAD_NOAUTH			0x27
-#define TX_ID_MULTI_PORT_END		0x2F
-#define TX_ID_STAND_TYPE_START		0x30
-#define TX_ID_PG950_S_PAD			0x31
-#define TX_ID_STAR_STAND			0x32
-#define TX_ID_N3300_V_PAD			0x35
-#define TX_ID_N3300_H_PAD			0xF2
-#define TX_ID_STAND_TYPE_END		0x3F
-#define TX_ID_BATT_PACK_TA			0x41 /* 0x40 ~ 0x41 is N/C*/
-#define TX_ID_BATT_PACK_U1200		0x42
-#define TX_ID_BATT_PACK_U3300		0x43
-#define TX_ID_BATT_PACK_END			0x4F /* reserved 0x40 ~ 0x4F for wireless battery pack */
-#define TX_ID_UNO_TX				0x72
-#define TX_ID_UNO_TX_B0				0x80
-#define TX_ID_UNO_TX_B1				0x81
-#define TX_ID_UNO_TX_B2				0x82
-#define TX_ID_UNO_TX_MAX			0x9F
-
-#define TX_ID_AUTH_PAD				0xA0
-#define TX_ID_P5200_PAD				0xA0
-#define TX_ID_N5200_V_PAD			0xA1
-#define TX_ID_N5200_H_PAD			0xA2
-#define TX_ID_P2400_PAD				0xA3
-#define TX_ID_P5400_PAD				0xA4
-#define TX_ID_AUTH_PAD_ACLASS_END	0xAF
-#define TX_ID_AUTH_PAD_END			0xBF /* reserved 0xA1 ~ 0xBF for auth pad */
-#define TX_ID_JIG_PAD				0xED /* for factory */
-#define TX_ID_FG_PAD				0xEF /* Galaxy Friends */
-#define TX_ID_NON_AUTH_PAD			0xF0
-#define TX_ID_NON_AUTH_PAD_END		0xFF
 
 /* value of WPC_TX_COM_CHG_ERR(0x05) */
 #define TX_CHG_ERR_OTP			0x12
@@ -1111,8 +1065,6 @@ struct mfc_charger_platform_data {
 	int tx_firmware_result;
 	int wc_ic_grade;
 	int wc_ic_rev;
-	int otp_firmware_ver;
-	int tx_firmware_ver;
 	int vout;
 	int vrect;
 	u8 trx_data_cmd;
@@ -1129,6 +1081,7 @@ struct mfc_charger_platform_data {
 	u32 buds_fod_ta_thresh;
 	u32 tx_max_op_freq;
 	u32 tx_min_op_freq;
+	u32 gear_min_op_freq;
 	u32 cep_timeout;
 	int no_hv;
 	bool keep_tx_vout;
@@ -1147,6 +1100,7 @@ struct mfc_charger_platform_data {
 	u32 mpp_epp_vout;
 	u32 mpp_epp_def_power;
 	u32 mpp_epp_max_count;
+	u32 mpp_epp_power_level;
 
 	bool pdrc_vrect_clear;
 };
@@ -1166,7 +1120,6 @@ struct mfc_charger_data {
 	struct mutex io_lock;
 	struct mutex wpc_en_lock;
 	struct mutex fw_lock;
-	const struct firmware *firm_data_bin;
 
 	u8 det_state; /* ACTIVE HIGH */
 	u8 pdrc_state; /* ACTIVE LOW */
@@ -1195,6 +1148,7 @@ struct mfc_charger_data {
 	struct wakeup_source *wpc_phm_exit_ws;
 	struct wakeup_source *epp_clear_ws;
 	struct wakeup_source *epp_count_ws;
+	struct wakeup_source *epp_mode_change_check_ws;
 	struct workqueue_struct *wqueue;
 	struct work_struct wcin_work;
 	struct delayed_work wpc_det_work;
@@ -1226,6 +1180,7 @@ struct mfc_charger_data {
 	struct delayed_work wpc_phm_exit_work;
 	struct delayed_work epp_clear_timer_work;
 	struct delayed_work epp_count_work;
+	struct delayed_work epp_mode_change_check_work;
 
 	struct alarm phm_alarm;
 
@@ -1279,6 +1234,7 @@ struct mfc_charger_data {
 	int duty_min;
 	int wpc_en_flag;
 	bool tx_device_phm;
+	int die_temp;
 
 	bool req_tx_id;
 	bool afc_tx_done;
@@ -1305,6 +1261,7 @@ struct mfc_charger_data {
 	union mfc_fod_state now_fod_state;
 	union mfc_cmfet_state now_cmfet_state;
 
+	unsigned int otp_firmware_ver; /* fw version of rx ic */
 #if defined(CONFIG_WIRELESS_IC_PARAM)
 	unsigned int wireless_param_info;
 	unsigned int wireless_fw_ver_param;
@@ -1337,26 +1294,6 @@ struct mfc_charger_data {
 	char d_buf[MFC_BAT_DUMP_SIZE];
 };
 
-#define fan_ctrl_pad(pad_id) (\
-	(pad_id >= 0x14 && pad_id <= 0x1f) || \
-	(pad_id >= 0x25 && pad_id <= 0x2f) || \
-	(pad_id >= 0x30 && pad_id <= 0x3f) || \
-	(pad_id >= 0x46 && pad_id <= 0x4f) || \
-	(pad_id >= 0xa1 && pad_id <= 0xcf) || \
-	(pad_id >= 0xd0 && pad_id <= 0xff))
-
-#define opfreq_ctrl_pad(pad_id) (\
-	((pad_id >= TX_ID_NON_AUTH_PAD) && (pad_id <= TX_ID_NON_AUTH_PAD_END)) || \
-	((pad_id >= TX_ID_N5200_V_PAD) && (pad_id <= TX_ID_AUTH_PAD_ACLASS_END)) || \
-	(pad_id == TX_ID_P1300_PAD) || \
-	(pad_id == TX_ID_N3300_V_PAD) || \
-	(pad_id == TX_ID_N3300_H_PAD) || \
-	(pad_id == TX_ID_P4300_PAD))
-
-#define volt_ctrl_pad(pad_id) (\
-	(pad_id != TX_ID_PG950_S_PAD) && \
-	(pad_id != TX_ID_PG950_D_PAD))
-
 #define bpp_mode(op_mode) (\
 	(op_mode == PAD_RX_MODE_WPC_BPP))
 
@@ -1369,5 +1306,10 @@ struct mfc_charger_data {
 #define epp_mode(op_mode) (\
 	(op_mode == PAD_RX_MODE_WPC_EPP) || \
 	(op_mode == PAD_RX_MODE_WPC_EPP_NEGO))
+
+#include <kunit/mock.h>
+#ifdef CONFIG_SEC_KUNIT
+#include <kunit/test.h>
+#endif /* CONFIG_SEC_KUNIT */
 
 #endif /* __WIRELESS_CHARGER_NU1668_H */

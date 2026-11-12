@@ -10,11 +10,11 @@
 };
 
 
-/* /home/dpi/qb5_8814/workspace/P4_1716/android/kernel_platform/kmodule/battery/stable/eureka/charger/max77775/max77775_charger.e3q.dtsi */
+/* /home/dpi/qb5_8814/workspace/P4_1716/android/kernel_platform/kmodule/battery/suwon/charger/max77775/max77775_charger.q6q.dtsi */
 &max77775_charger {
 	charger,enable_sysovlo_irq;
 	charger,fac_vsys = <4400>;
-
-	charger,fsw = <2>; /* 1.5MHz */
-	charger,enable_noise_wa;
+	charger,fsw = <0>; /* 3MHz */
+	charger,default_vtrack_voltage = <180>;
+	charger,icl_tolerance_wa;
 };

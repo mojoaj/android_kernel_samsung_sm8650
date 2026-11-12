@@ -27,8 +27,41 @@
 #define DIRECT_CHARGING_FLOAT_VOLTAGE_MARGIN		20
 #define DIRECT_CHARGING_FORCE_SOC_MARGIN			10
 
+static void print_log_for_step_charging_dt_2darr(unsigned int **arr, int rows, int cols, const char *arr_name)
+{
+	char str[256] = {0,};
+	int i = 0, j = 0;
+
+	for (i = 0; i < rows; i++) {
+		memset(str, 0x0, sizeof(str));
+		snprintf(str, sizeof(str), "%s arr[%d]:", arr_name, i);
+		for (j = 0; j < cols; j++)
+			snprintf(str + strlen(str), sizeof(str) - strlen(str), " %d", arr[i][j]);
+
+		pr_info("%s\n", str);
+	}
+}
+
+#if IS_ENABLED(CONFIG_DIRECT_CHARGING)
+static void print_log_for_step_charging_dt_1darr(unsigned int *arr, int size, const char *arr_name)
+{
+	char str[256] = {0,};
+	int i = 0;
+
+	snprintf(str, sizeof(str), "%s arr:", arr_name);
+	for (i = 0; i < size; i++)
+		snprintf(str + strlen(str), sizeof(str) - strlen(str), " %d", arr[i]);
+
+	pr_info("%s\n", str);
+}
+#endif
+
 void sec_bat_reset_step_charging(struct sec_battery_info *battery)
 {
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+	sec_vote(battery->vlim_vote, VOTER_STEP_CHARGE, false, 0);
+	sec_vote(battery->vlim_vote, VOTER_DC_STEP_CHARGE, false, 0);
+#endif
 	pr_info("%s\n", __func__);
 	battery->step_chg_status = -1;
 #if IS_ENABLED(CONFIG_WIRELESS_CHARGING)
@@ -42,6 +75,10 @@ EXPORT_SYMBOL(sec_bat_reset_step_charging);
 
 void sec_bat_exit_step_charging(struct sec_battery_info *battery)
 {
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+	sec_vote(battery->vlim_vote, VOTER_STEP_CHARGE, false, 0);
+	sec_vote(battery->vlim_vote, VOTER_DC_STEP_CHARGE, false, 0);
+#endif
 	sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, false, 0);
 	if (battery->step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE)
 		sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, false, 0);
@@ -58,6 +95,61 @@ void sec_bat_exit_wpc_step_charging(struct sec_battery_info *battery)
 }
 EXPORT_SYMBOL(sec_bat_exit_wpc_step_charging);
 
+bool skip_check_step(struct sec_battery_info *battery)
+{
+	union power_supply_propval val = {0, };
+	int fpdo_sc = 0;
+
+#if IS_ENABLED(CONFIG_WIRELESS_CHARGING)
+	if (is_wireless_all_type(battery->cable_type))
+		goto end_skip_check_step;
+#endif
+
+	if (battery->cable_type == SEC_BATTERY_CABLE_FPDO_DC) {
+		psy_do_property(battery->pdata->charger_name, get,
+				POWER_SUPPLY_EXT_PROP_CHARGING_ENABLED_DC, val);
+		fpdo_sc = val.intval;
+		pr_info("%s: SC for FPDO_DC(%d)\n", __func__, fpdo_sc);
+
+		if (!fpdo_sc && battery->step_chg_status >= 0)
+			sec_bat_reset_step_charging(battery);
+	}
+
+#if IS_ENABLED(CONFIG_DIRECT_CHARGING)
+	if (is_pd_apdo_wire_type(battery->cable_type)) {
+		psy_do_property(battery->pdata->charger_name, get,
+			POWER_SUPPLY_EXT_PROP_CHANGE_CHARGING_SOURCE, val);
+		if (val.intval == SEC_CHARGING_SOURCE_SWITCHING) {
+			pr_info("%s: SC for test_mode_source\n", __func__);
+			return false;
+		} else if (val.intval == SEC_CHARGING_SOURCE_DIRECT) {
+			pr_info("%s: DC for test_mode_source\n", __func__);
+			goto end_skip_check_step;
+		}
+		if (!fpdo_sc && !((battery->current_event & SEC_BAT_CURRENT_EVENT_DC_ERR) &&
+			(battery->ta_alert_mode == OCP_NONE)))
+			goto end_skip_check_step;
+	}
+	if ((is_pd_apdo_wire_type(battery->cable_type) || is_pd_apdo_wire_type(battery->wire_status)) &&
+		!fpdo_sc &&
+		(battery->sink_status.rp_currentlvl == RP_CURRENT_LEVEL3)) {
+		pr_info("%s: This cable type should be checked in dc step check\n", __func__);
+		goto end_skip_check_step;
+	}
+#endif
+
+	if (!is_hv_wire_type(battery->cable_type) && !is_pd_wire_type(battery->cable_type) &&
+		(battery->sink_status.rp_currentlvl != RP_CURRENT_LEVEL3))
+		goto end_skip_check_step;
+
+	return false;
+
+end_skip_check_step:
+	sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, false, 0);
+	sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, false, 0);
+	return true;
+}
+
 /*
  * true: step is changed
  * false: not changed
@@ -71,16 +163,7 @@ bool sec_bat_check_step_charging(struct sec_battery_info *battery)
 	static int curr_cnt;
 	static bool skip_lcd_on_changed;
 	int age_step = battery->pdata->age_step;
-	union power_supply_propval val = {0, };
-	int fpdo_sc = 0;
 
-#if IS_ENABLED(CONFIG_WIRELESS_CHARGING)
-	if (is_wireless_all_type(battery->cable_type)) {
-		sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, false, 0);
-		sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, false, 0);
-		return false;
-	}
-#endif
 #if defined(CONFIG_SEC_FACTORY)
 	if (!battery->step_chg_en_in_factory)
 		return false;
@@ -94,49 +177,17 @@ bool sec_bat_check_step_charging(struct sec_battery_info *battery)
 		battery->pdata->step_chg_cond[0][0] = battery->test_step_condition;
 #endif
 
+	if (battery->step_chg_type & STEP_CHARGING_CONDITION_ONLINE) {
+		if (skip_check_step(battery))
+			return false;
+	}
+
+	pr_info("%s\n", __func__);
+
 	if (battery->siop_level < 100 || battery->lcd_status)
 		lcd_status = 1;
 	else
 		lcd_status = 0;
-
-	if (battery->cable_type == SEC_BATTERY_CABLE_FPDO_DC) {
-		psy_do_property(battery->pdata->charger_name, get,
-				POWER_SUPPLY_EXT_PROP_CHARGING_ENABLED_DC, val);
-		fpdo_sc = val.intval;
-		pr_info("%s: SC for FPDO_DC(%d)", __func__, fpdo_sc);
-
-		if (!fpdo_sc && battery->step_chg_status >= 0)
-			sec_bat_reset_step_charging(battery);
-	}
-
-	if (battery->step_chg_type & STEP_CHARGING_CONDITION_ONLINE) {
-#if IS_ENABLED(CONFIG_DIRECT_CHARGING)
-		if ((is_pd_apdo_wire_type(battery->cable_type) && !fpdo_sc) &&
-			!((battery->current_event & SEC_BAT_CURRENT_EVENT_DC_ERR) &&
-			(battery->ta_alert_mode == OCP_NONE))) {
-			sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, false, 0);
-			sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, false, 0);
-			return false;
-		}
-
-		if (((is_pd_apdo_wire_type(battery->cable_type) || is_pd_apdo_wire_type(battery->wire_status)) &&
-					!fpdo_sc) &&
-			(battery->sink_status.rp_currentlvl == RP_CURRENT_LEVEL3)) {
-			pr_info("%s: This cable type should be checked in dc step check\n", __func__);
-			sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, false, 0);
-			sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, false, 0);
-			return false;
-		}
-#endif
-		if (!is_hv_wire_type(battery->cable_type) && !is_pd_wire_type(battery->cable_type) &&
-			(battery->sink_status.rp_currentlvl != RP_CURRENT_LEVEL3)) {
-			sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, false, 0);
-			sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, false, 0);
-			return false;
-		}
-	}
-
-	pr_info("%s\n", __func__);
 
 	if (battery->step_chg_type & STEP_CHARGING_CONDITION_CHARGE_POWER) {
 		if (battery->max_charge_power < battery->step_chg_charge_power) {
@@ -192,8 +243,13 @@ bool sec_bat_check_step_charging(struct sec_battery_info *battery)
 	if (battery->step_chg_type & STEP_CHARGING_CONDITION_VOLTAGE) {
 #if IS_ENABLED(CONFIG_DUAL_BATTERY)
 		step_condition_sub = battery->pdata->step_chg_cond_sub[age_step][i];
-		value = battery->voltage_avg_main;
-		value_sub = battery->voltage_avg_sub;
+		if (battery->pdata->step_chg_use_vnow) {
+			value = battery->voltage_now_main;
+			value_sub = battery->voltage_now_sub;
+		} else {
+			value = battery->voltage_avg_main;
+			value_sub = battery->voltage_avg_sub;
+		}
 #else
 		value = battery->voltage_avg;
 #endif
@@ -268,8 +324,20 @@ check_step_change:
 		sec_vote(battery->fcc_vote, VOTER_STEP_CHARGE, true,
 			battery->pdata->step_chg_curr[age_step][i]);
 
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+		if (battery->pdata->step_chg_vsublim) {
+			unsigned int vlim =
+				battery->pdata->chg_float_voltage - battery->pdata->limiter_aging_float_offset;
+
+			if (battery->step_chg_status != battery->step_chg_step - 1)
+				vlim = battery->pdata->step_chg_vsublim;
+
+			sec_vote(battery->vlim_vote, VOTER_STEP_CHARGE, true, vlim);
+		}
+#endif
+
 		if (battery->step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) {
-			pr_info("%s : float voltage = %d\n", __func__,
+			pr_info("%s: float voltage = %d\n", __func__,
 				battery->pdata->step_chg_vfloat[age_step][i]);
 			sec_vote(battery->fv_vote, VOTER_STEP_CHARGE, true,
 				battery->pdata->step_chg_vfloat[age_step][i]);
@@ -419,12 +487,14 @@ EXPORT_SYMBOL(sec_bat_check_wpc_step_charging);
 #if IS_ENABLED(CONFIG_DIRECT_CHARGING)
 bool skip_check_dc_step(struct sec_battery_info *battery)
 {
+	union power_supply_propval val = {0, };
+
 	if (battery->dchg_dc_in_swelling) {
 		if (battery->current_event & SEC_BAT_CURRENT_EVENT_LOW_TEMP_MODE)
-			return true;
+			goto end_skip_check_dc_step;
 	} else {
 		if (battery->current_event & SEC_BAT_CURRENT_EVENT_SWELLING_MODE)
-			return true;
+			goto end_skip_check_dc_step;
 	}
 
 	if (battery->current_event & SEC_BAT_CURRENT_EVENT_HV_DISABLE ||
@@ -435,9 +505,25 @@ bool skip_check_dc_step(struct sec_battery_info *battery)
 		   battery->uno_en ||
 		   battery->mix_limit ||
 		   battery->lrp_chg_src == SEC_CHARGING_SOURCE_SWITCHING)
-		return true;
-	else
+		goto end_skip_check_dc_step;
+
+	psy_do_property(battery->pdata->charger_name, get,
+		POWER_SUPPLY_EXT_PROP_CHANGE_CHARGING_SOURCE, val);
+	if (val.intval == SEC_CHARGING_SOURCE_DIRECT) {
+		pr_info("%s: DC for test_mode_source\n", __func__);
 		return false;
+	} else if (val.intval == SEC_CHARGING_SOURCE_SWITCHING) {
+		pr_info("%s: SC for test_mode_source\n", __func__);
+		return true;
+	}
+
+	return false;
+
+end_skip_check_dc_step:
+	if (battery->step_chg_status >= 0)
+		sec_bat_reset_step_charging(battery);
+
+	return true;
 }
 
 bool sec_bat_check_dc_step_charging(struct sec_battery_info *battery)
@@ -449,6 +535,11 @@ bool sec_bat_check_dc_step_charging(struct sec_battery_info *battery)
 	union power_supply_propval val = {0, };
 	int age_step = battery->pdata->age_step;
 	unsigned int dc_step_chg_type;
+
+	if (battery->dc_step_chg_step == 0 || battery->dc_step_chg_type == NULL) {
+		pr_info("%s : Skip dc_step_charging. Please check dc_step_chg_* properties in .dtsi\n", __func__);
+		return false;
+	}
 
 	if (battery->cable_type == SEC_BATTERY_CABLE_FPDO_DC) {
 		sec_vote(battery->dc_fv_vote, VOTER_DC_STEP_CHARGE, false, 0);
@@ -480,8 +571,6 @@ bool sec_bat_check_dc_step_charging(struct sec_battery_info *battery)
 		}
 	}
 	if (skip_check_dc_step(battery)) {
-		if (battery->step_chg_status >= 0)
-			sec_bat_reset_step_charging(battery);
 		sec_vote(battery->dc_fv_vote, VOTER_DC_STEP_CHARGE, false, 0);
 		return false;
 	}
@@ -547,15 +636,28 @@ bool sec_bat_check_dc_step_charging(struct sec_battery_info *battery)
 		step_soc = battery->dc_step_chg_step - 1;
 
 	if (dc_step_chg_type & STEP_CHARGING_CONDITION_VOLTAGE) {
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+		int value_main = 0;
+		int value_sub = 0;
+		int step_cond_main = 0;
+		int step_cond_sub = 0;
+#endif
 		step_vol = i;
 
 #if IS_ENABLED(CONFIG_DUAL_BATTERY)
-		value = max((battery->voltage_avg_main - battery->pdata->dc_step_cond_v_margin_main),
-					(battery->voltage_avg_sub - battery->pdata->dc_step_cond_v_margin_sub));
+		if (battery->pdata->dc_step_chg_use_vnow) {
+			value_main = battery->voltage_now_main;
+			value_sub = battery->voltage_now_sub;
+		} else {
+			value_main = battery->voltage_avg_main;
+			value_sub = battery->voltage_avg_sub;
+		}
+		step_cond_main = battery->pdata->dc_step_chg_cond_vol[age_step][step_vol];
+		step_cond_sub = battery->pdata->dc_step_chg_cond_vol_sub[age_step][step_vol];
+
 		/* (charging current)step down when main or sub voltage condition meets */
 		while (step_vol < battery->dc_step_chg_step - 1) {
-			if (battery->voltage_avg_main < battery->pdata->dc_step_chg_cond_vol[age_step][step_vol] &&
-				battery->voltage_avg_sub < battery->pdata->dc_step_chg_cond_vol_sub[age_step][step_vol])
+			if (value_main < step_cond_main && value_sub < step_cond_sub)
 				break;
 			step_vol++;
 			if (battery->step_chg_status >= 0)
@@ -735,6 +837,13 @@ check_dc_step_change:
 			battery->pdata->dc_step_chg_val_iout[age_step][step]);
 		sec_vote_refresh(battery->fcc_vote);
 
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+		if (battery->pdata->dc_step_chg_vsublim) {
+			sec_vote(battery->vlim_vote, VOTER_DC_STEP_CHARGE, true,
+					battery->pdata->dc_step_chg_vsublim[battery->step_chg_status]);
+		}
+#endif
+
 		return true;
 	} else {
 		battery->dc_step_chg_iin_cnt = 0;
@@ -770,13 +879,14 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 			__func__, battery->dc_step_chg_step);
 	}
 
-	battery->dc_step_chg_type = kcalloc(battery->dc_step_chg_step, sizeof(u32), GFP_KERNEL);
 	p = of_get_property(np, "battery,dc_step_chg_type", &len);
 	if (!p) {
 		pr_info("%s: dc_step_chg_type is Empty\n", __func__);
-		return -1;
+		goto dc_step_charging_dt_error;
 	}
 	len = len / sizeof(u32);
+
+	battery->dc_step_chg_type = kcalloc(battery->dc_step_chg_step, sizeof(u32), GFP_KERNEL);
 	ret = of_property_read_u32_array(np, "battery,dc_step_chg_type",
 			battery->dc_step_chg_type, len);
 	if (len != battery->dc_step_chg_step) {
@@ -794,6 +904,21 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 	for (i = 0; i < battery->dc_step_chg_step; i++)
 		sprintf(str + strlen(str), " 0x%x", battery->dc_step_chg_type[i]);
 	pr_info("%s: %s 0x%x\n", __func__, str, dc_step_chg_type);
+
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+	pdata->dc_step_chg_vsublim = kcalloc(battery->dc_step_chg_step, sizeof(u32), GFP_KERNEL);
+
+	ret = of_property_read_u32_array(np, "battery,dc_step_chg_vsublim",
+			pdata->dc_step_chg_vsublim, battery->dc_step_chg_step);
+	if (ret) {
+		pr_info("%s: dc_step_chg_vsublim is empty\n", __func__);
+		kfree(pdata->dc_step_chg_vsublim);
+		pdata->dc_step_chg_vsublim = NULL;
+	} else {
+		print_log_for_step_charging_dt_1darr(pdata->dc_step_chg_vsublim,
+			battery->dc_step_chg_step, "dc_step_chg_vsublim");
+	}
+#endif
 
 	ret = of_property_read_u32(np, "battery,dc_step_chg_charge_power",
 			&battery->dc_step_chg_charge_power);
@@ -843,14 +968,8 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 				}
 			}
 
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "vol arr[%d]:", i);
-				for (j = 0; j < battery->dc_step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->dc_step_chg_cond_vol[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+			print_log_for_step_charging_dt_2darr(pdata->dc_step_chg_cond_vol,
+				num_age_step, battery->dc_step_chg_step, "dc_step_chg_cond_vol");
 
 #if IS_ENABLED(CONFIG_DUAL_BATTERY)
 			len = len / sizeof(u32);
@@ -885,14 +1004,8 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 				}
 			}
 
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "vol_sub arr[%d]:", i);
-				for (j = 0; j < battery->dc_step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->dc_step_chg_cond_vol_sub[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+			print_log_for_step_charging_dt_2darr(pdata->dc_step_chg_cond_vol_sub,
+				num_age_step, battery->dc_step_chg_step, "dc_step_chg_cond_vol_sub");
 #endif
 			if (ret) {
 				pr_info("%s : dc_step_chg_cond_vol read fail\n", __func__);
@@ -923,6 +1036,9 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 				battery->pdata->sc_vbat_thresh_sub = battery->pdata->sc_vbat_thresh_main;
 #endif
 		}
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+		battery->pdata->dc_step_chg_use_vnow = of_property_read_bool(np, "battery,dc_step_chg_use_vnow");
+#endif
 	}
 
 	if (dc_step_chg_type & STEP_CHARGING_CONDITION_SOC ||
@@ -968,14 +1084,8 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 				}
 			}
 
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "soc arr[%d]:", i);
-				for (j = 0; j < battery->dc_step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->dc_step_chg_cond_soc[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+			print_log_for_step_charging_dt_2darr(pdata->dc_step_chg_cond_soc,
+				num_age_step, battery->dc_step_chg_step, "dc_step_chg_cond_soc");
 
 			if (ret) {
 				pr_info("%s : dc_step_chg_cond_soc read fail\n", __func__);
@@ -1042,14 +1152,9 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 							pdata->dc_step_chg_val_vfloat[0][j];
 				}
 			}
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "vfloat arr[%d]:", i);
-				for (j = 0; j < battery->dc_step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->dc_step_chg_val_vfloat[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+
+			print_log_for_step_charging_dt_2darr(pdata->dc_step_chg_val_vfloat,
+				num_age_step, battery->dc_step_chg_step, "dc_step_chg_val_vfloat");
 
 			if (ret) {
 				pr_info("%s : dc_step_chg_val_vfloat read fail\n", __func__);
@@ -1071,11 +1176,8 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 								battery->pdata->chg_float_voltage;
 			}
 
-			memset(str, 0x0, sizeof(str));
-			sprintf(str + strlen(str), "dc_step_chg_vol_offset arr :");
-			for (i = 0; i < battery->dc_step_chg_step; i++)
-				sprintf(str + strlen(str), " %d", pdata->dc_step_chg_vol_offset[i]);
-			pr_info("%s: %s\n", __func__, str);
+			print_log_for_step_charging_dt_1darr(pdata->dc_step_chg_vol_offset,
+				battery->dc_step_chg_step, "dc_step_chg_vol_offset");
 		}
 	}
 
@@ -1116,14 +1218,8 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 			}
 		}
 
-		/* debug log */
-		for (i = 0; i < num_age_step; i++) {
-			memset(str, 0x0, sizeof(str));
-			sprintf(str + strlen(str), "iout arr[%d]:", i);
-			for (j = 0; j < battery->dc_step_chg_step; j++)
-				sprintf(str + strlen(str), " %d", pdata->dc_step_chg_val_iout[i][j]);
-			pr_info("%s: %s\n", __func__, str);
-		}
+		print_log_for_step_charging_dt_2darr(pdata->dc_step_chg_val_iout,
+			num_age_step, battery->dc_step_chg_step, "dc_step_chg_val_iout");
 
 		if (ret) {
 			pr_info("%s : dc_step_chg_val_iout read fail\n", __func__);
@@ -1208,6 +1304,11 @@ void sec_bat_set_aging_info_step_charging(struct sec_battery_info *battery)
 	int age_step = battery->pdata->age_step;
 
 #if IS_ENABLED(CONFIG_DIRECT_CHARGING)
+	if (battery->dc_step_chg_step == 0 || battery->dc_step_chg_type == NULL) {
+		pr_info("%s : Skip dc_step_charging. Please check dc_step_chg_* properties in .dtsi\n", __func__);
+		return;
+	}
+
 	i = (battery->step_chg_status < 0 ? 0 : battery->step_chg_status);
 	if (!battery->dc_step_chg_type[i]) {
 		pr_info("%s : invalid dc step chg type\n", __func__);
@@ -1270,7 +1371,6 @@ void sec_step_charging_dt(struct sec_battery_info *battery, struct device *dev)
 	sec_battery_platform_data_t *pdata = battery->pdata;
 	unsigned int i = 0, j = 0;
 	const u32 *p;
-	char str[128] = {0,};
 	u32 *soc_cond_temp, *vfloat_temp, *curr_temp;
 	int num_age_step = battery->pdata->num_age_step;
 
@@ -1289,6 +1389,15 @@ void sec_step_charging_dt(struct sec_battery_info *battery, struct device *dev)
 		pr_err("%s: step_chg_step is %d\n",
 			__func__, battery->step_chg_step);
 	}
+
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+	ret = of_property_read_u32(np, "battery,step_chg_vsublim", &pdata->step_chg_vsublim);
+
+	if (ret)
+		pdata->step_chg_vsublim = 0;
+
+	pr_err("%s: step_chg_vsublim is %d\n", __func__, pdata->step_chg_vsublim);
+#endif
 
 	ret = of_property_read_u32(np, "battery,step_chg_charge_power",
 			&battery->step_chg_charge_power);
@@ -1329,14 +1438,8 @@ void sec_step_charging_dt(struct sec_battery_info *battery, struct device *dev)
 			}
 		}
 
-		/* debug log */
-		for (i = 0; i < num_age_step; i++) {
-			memset(str, 0x0, sizeof(str));
-			sprintf(str + strlen(str), "step_chg_cond arr[%d]:", i);
-			for (j = 0; j < battery->step_chg_step; j++)
-				sprintf(str + strlen(str), " %d", pdata->step_chg_cond[i][j]);
-			pr_info("%s: %s\n", __func__, str);
-		}
+		print_log_for_step_charging_dt_2darr(pdata->step_chg_cond,
+			num_age_step, battery->step_chg_step, "step_chg_cond");
 
 		if (ret) {
 			pr_info("%s : step_chg_cond read fail\n", __func__);
@@ -1347,43 +1450,53 @@ void sec_step_charging_dt(struct sec_battery_info *battery, struct device *dev)
 
 #if IS_ENABLED(CONFIG_DUAL_BATTERY)
 		if (battery->step_chg_type & STEP_CHARGING_CONDITION_VOLTAGE) {
-			/* get dt to buff */
-			soc_cond_temp = kcalloc(battery->step_chg_step * num_age_step, sizeof(u32), GFP_KERNEL);
-			ret = of_property_read_u32_array(np, "battery,step_chg_cond_sub",
-					soc_cond_temp, battery->step_chg_step * num_age_step);
-
-			/* copy buff to 2d arr */
-			pdata->step_chg_cond_sub = kcalloc(num_age_step, sizeof(u32 *), GFP_KERNEL);
-			for (i = 0; i < num_age_step; i++) {
-				pdata->step_chg_cond_sub[i] =
-					kcalloc(battery->step_chg_step, sizeof(u32), GFP_KERNEL);
-				for (j = 0; j < battery->step_chg_step; j++)
-					pdata->step_chg_cond_sub[i][j] = soc_cond_temp[i*battery->step_chg_step + j];
-			}
-
-			/* if there are only 1 dimentional array of value, get the same value */
-			if (battery->step_chg_step * num_age_step != len) {
-				ret = of_property_read_u32_array(np, "battery,step_chg_cond",
-					*pdata->step_chg_cond_sub, battery->step_chg_step);
+			p = of_get_property(np, "battery,step_chg_cond_sub", &len);
+			if (!p) {
+				pr_err("%s: step_chg_cond_sub is Empty\n", __func__);
+				pdata->step_chg_cond_sub = kcalloc(num_age_step, sizeof(u32 *), GFP_KERNEL);
 				for (i = 0; i < num_age_step; i++) {
+					pdata->step_chg_cond_sub[i] =
+						kcalloc(battery->step_chg_step, sizeof(u32), GFP_KERNEL);
 					for (j = 0; j < battery->step_chg_step; j++)
-						pdata->step_chg_cond_sub[i][j] = pdata->step_chg_cond[0][j];
+						pdata->step_chg_cond_sub[i][j] = pdata->step_chg_cond[i][j];
 				}
+			} else {
+				len = len / sizeof(u32);
+				pr_info("%s: step(%d) * age_step(%d), step_chg_cond_sub len(%d)\n",
+					__func__, battery->step_chg_step, num_age_step, len);
+				/* get dt to buff */
+				soc_cond_temp = kcalloc(battery->step_chg_step * num_age_step, sizeof(u32), GFP_KERNEL);
+				ret = of_property_read_u32_array(np, "battery,step_chg_cond_sub",
+						soc_cond_temp, battery->step_chg_step * num_age_step);
+
+				/* copy buff to 2d arr */
+				pdata->step_chg_cond_sub = kcalloc(num_age_step, sizeof(u32 *), GFP_KERNEL);
+				for (i = 0; i < num_age_step; i++) {
+					pdata->step_chg_cond_sub[i] =
+						kcalloc(battery->step_chg_step, sizeof(u32), GFP_KERNEL);
+					for (j = 0; j < battery->step_chg_step; j++)
+						pdata->step_chg_cond_sub[i][j] = soc_cond_temp[i*battery->step_chg_step + j];
+				}
+
+				/* if there are only 1 dimentional array of value, get the same value */
+				if (battery->step_chg_step * num_age_step != len) {
+					ret = of_property_read_u32_array(np, "battery,step_chg_cond_sub",
+						*pdata->step_chg_cond_sub, battery->step_chg_step);
+					for (i = 0; i < num_age_step; i++) {
+						for (j = 0; j < battery->step_chg_step; j++)
+							pdata->step_chg_cond_sub[i][j] = pdata->step_chg_cond_sub[0][j];
+					}
+				}
+
+				print_log_for_step_charging_dt_2darr(pdata->step_chg_cond_sub,
+					num_age_step, battery->step_chg_step, "step_chg_cond_sub");
+
+				if (ret)
+					pr_info("%s : step_chg_cond_sub read fail\n", __func__);
+
+				kfree(soc_cond_temp);
 			}
-
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "step_chg_cond_sub arr[%d]:", i);
-				for (j = 0; j < battery->step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->step_chg_cond_sub[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
-
-			if (ret)
-				pr_info("%s : step_chg_cond_sub read fail\n", __func__);
-
-			kfree(soc_cond_temp);
+			battery->pdata->step_chg_use_vnow = of_property_read_bool(np, "battery,step_chg_use_vnow");
 		}
 #endif
 
@@ -1434,14 +1547,8 @@ void sec_step_charging_dt(struct sec_battery_info *battery, struct device *dev)
 				}
 			}
 
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "step_chg_vfloat arr[%d]:", i);
-				for (j = 0; j < battery->step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->step_chg_vfloat[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+			print_log_for_step_charging_dt_2darr(pdata->step_chg_vfloat,
+				num_age_step, battery->step_chg_step, "step_chg_vfloat");
 
 			if (ret)
 				pr_info("%s : step_chg_vfloat read fail\n", __func__);
@@ -1481,14 +1588,8 @@ void sec_step_charging_dt(struct sec_battery_info *battery, struct device *dev)
 				}
 			}
 
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "step_chg_curr arr[%d]:", i);
-				for (j = 0; j < battery->step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->step_chg_curr[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+			print_log_for_step_charging_dt_2darr(pdata->step_chg_curr,
+				num_age_step, battery->step_chg_step, "step_chg_curr");
 
 			if (ret)
 				pr_info("%s : step_chg_curr read fail\n", __func__);
@@ -1536,13 +1637,8 @@ void sec_step_charging_dt(struct sec_battery_info *battery, struct device *dev)
 					pdata->step_chg_cond_soc[i][j] = curr_temp[i*battery->step_chg_step + j];
 			}
 
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "step_chg_cond_soc arr[%d]:", i);
-				for (j = 0; j < battery->step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->step_chg_cond_soc[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+			print_log_for_step_charging_dt_2darr(pdata->step_chg_cond_soc,
+				num_age_step, battery->step_chg_step, "step_chg_cond_soc");
 err_soc:
 			pr_info("%s: step_chg_soc end\n", __func__);
 		}
@@ -1557,7 +1653,6 @@ void sec_wpc_step_charging_dt(struct sec_battery_info *battery, struct device *d
 	sec_battery_platform_data_t *pdata = battery->pdata;
 	unsigned int i = 0, j = 0;
 	const u32 *p;
-	char str[128] = {0,};
 	u32 *soc_cond_temp, *vfloat_temp, *curr_temp;
 	int num_age_step = battery->pdata->num_age_step;
 
@@ -1610,14 +1705,8 @@ void sec_wpc_step_charging_dt(struct sec_battery_info *battery, struct device *d
 			}
 		}
 
-		/* debug log */
-		for (i = 0; i < num_age_step; i++) {
-			memset(str, 0x0, sizeof(str));
-			sprintf(str + strlen(str), "wpc_step_chg_cond arr[%d]:", i);
-			for (j = 0; j < battery->wpc_step_chg_step; j++)
-				sprintf(str + strlen(str), " %d", pdata->wpc_step_chg_cond[i][j]);
-			pr_info("%s: %s\n", __func__, str);
-		}
+		print_log_for_step_charging_dt_2darr(pdata->wpc_step_chg_cond,
+			num_age_step, battery->wpc_step_chg_step, "wpc_step_chg_cond");
 
 		if (ret) {
 			pr_info("%s : wpc_step_chg_cond read fail\n", __func__);
@@ -1673,14 +1762,8 @@ void sec_wpc_step_charging_dt(struct sec_battery_info *battery, struct device *d
 				}
 			}
 
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "wpc_step_chg_vfloat arr[%d]:", i);
-				for (j = 0; j < battery->wpc_step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->wpc_step_chg_vfloat[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+			print_log_for_step_charging_dt_2darr(pdata->wpc_step_chg_vfloat,
+				num_age_step, battery->wpc_step_chg_step, "wpc_step_chg_vfloat");
 
 			if (ret)
 				pr_info("%s : wpc_step_chg_vfloat read fail\n", __func__);
@@ -1720,14 +1803,8 @@ void sec_wpc_step_charging_dt(struct sec_battery_info *battery, struct device *d
 				}
 			}
 
-			/* debug log */
-			for (i = 0; i < num_age_step; i++) {
-				memset(str, 0x0, sizeof(str));
-				sprintf(str + strlen(str), "wpc_step_chg_curr arr[%d]:", i);
-				for (j = 0; j < battery->wpc_step_chg_step; j++)
-					sprintf(str + strlen(str), " %d", pdata->wpc_step_chg_curr[i][j]);
-				pr_info("%s: %s\n", __func__, str);
-			}
+			print_log_for_step_charging_dt_2darr(pdata->wpc_step_chg_curr,
+				num_age_step, battery->wpc_step_chg_step, "wpc_step_chg_curr");
 
 			if (ret)
 				pr_info("%s : wpc_step_chg_curr read fail\n", __func__);
