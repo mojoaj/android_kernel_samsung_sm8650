@@ -177,6 +177,12 @@ struct ssc_flip_data {
 	struct work_struct work_ssc_flip;
 	bool is_opend;
 	bool only_update;
+#if IS_ENABLED(CONFIG_SUPPORT_VIRTUAL_OPTIC)
+	/* q6q: re-select the inner optic after an unfold, see ssc_voptic_kick_work_func */
+	struct work_struct work_voptic_kick;
+	struct adsp_data *data;
+	bool voptic_kick_pending;
+#endif
 };
 struct ssc_flip_data *pdata_ssc_flip;
 #endif
@@ -659,6 +665,57 @@ void ssc_flip_work_func(struct work_struct *work)
 #endif
 }
 
+#if IS_ENABLED(CONFIG_SUPPORT_VIRTUAL_OPTIC)
+static void ssc_voptic_fac_flip(struct adsp_data *data, int32_t state)
+{
+	int32_t fstate[2] = {VOPTIC_OP_CMD_FAC_FLIP, state};
+	uint8_t cnt = 0;
+
+	mutex_lock(&data->vir_optic_factory_mutex);
+	adsp_unicast(fstate, sizeof(fstate),
+		MSG_VIR_OPTIC, 0, MSG_TYPE_OPTION_DEFINE);
+	while (!(data->ready_flag[MSG_TYPE_OPTION_DEFINE] & 1 << MSG_VIR_OPTIC) &&
+		cnt++ < TIMEOUT_CNT)
+		usleep_range(500, 550);
+	data->ready_flag[MSG_TYPE_OPTION_DEFINE] &= ~(1 << MSG_VIR_OPTIC);
+	mutex_unlock(&data->vir_optic_factory_mutex);
+
+	if (cnt >= TIMEOUT_CNT)
+		pr_err("[FACTORY] %s: Timeout!!! (%d)\n", __func__, state);
+}
+
+/*
+ * q6q: after a fold the ADSP virtual optic switches to the sub (cover) ALS,
+ * but on unfold the plain VOPTIC_OP_CMD_SSC_FLIP(0) leaves the inner ALS
+ * stopped (raw 0, device id -1) until reboot. Stock One UI recovers it from
+ * its closed framework; here we do the equivalent: once the inner panel is
+ * on again, select the inner optic explicitly, then hand control back to
+ * the hall state. Same messages as writing 1 then 0 to ssc_core/fac_fstate.
+ */
+static void ssc_voptic_kick_work_func(struct work_struct *work)
+{
+	struct adsp_data *data = pdata_ssc_flip->data;
+
+	if (!data || curr_fstate != 0)
+		return;
+
+	ssc_voptic_fac_flip(data, FSTATE_FAC_INACTIVE);
+	ssc_voptic_fac_flip(data, curr_fstate);
+	data->fac_fstate = curr_fstate;
+	pdata_ssc_flip->voptic_kick_pending = false;
+	pr_info("[FACTORY] %s: inner optic re-selected\n", __func__);
+}
+
+/* Called by the light panel notifier when the inner (idx 0) panel turns on. */
+void ssc_voptic_inner_panel_on(void)
+{
+	if (pdata_ssc_flip && pdata_ssc_flip->voptic_kick_pending &&
+		curr_fstate == 0)
+		queue_work(pdata_ssc_flip->ssc_flip_wq,
+			&pdata_ssc_flip->work_voptic_kick);
+}
+#endif
+
 void sns_flip_init_work(void)
 {
 	pr_info("[FACTORY] sns_flip_init_work:%d \n", (int)curr_fstate);
@@ -680,6 +737,10 @@ int sns_device_mode_notify(struct notifier_block *nb,
 		__func__, curr_fstate, data->fac_fstate);
 
 	curr_fstate = (int32_t)flip_state;
+#if IS_ENABLED(CONFIG_SUPPORT_VIRTUAL_OPTIC)
+	if (curr_fstate != 0)
+		pdata_ssc_flip->voptic_kick_pending = true;
+#endif
 #if !defined(CONFIG_SEC_FACTORY) || !defined(CONFIG_SUPPORT_SENSOR_FLIP_MODEL)
 	data->fac_fstate = curr_fstate;
 #endif
@@ -1818,6 +1879,10 @@ int __init core_factory_init(void)
 		return -ENOMEM;
 	}
 	INIT_WORK(&pdata_ssc_flip->work_ssc_flip, ssc_flip_work_func);
+#if IS_ENABLED(CONFIG_SUPPORT_VIRTUAL_OPTIC)
+	pdata_ssc_flip->data = data;
+	INIT_WORK(&pdata_ssc_flip->work_voptic_kick, ssc_voptic_kick_work_func);
+#endif
 #ifdef SUPPORT_HALL_NOTIFIER
 	data->adsp_nb.notifier_call = sns_device_mode_notify,
 	data->adsp_nb.priority = 1,

@@ -263,6 +263,9 @@ void lsm6dso_selftest_stop_work_func(struct work_struct *work);
 #if IS_ENABLED(CONFIG_SUPPORT_DEVICE_MODE)
 void sns_device_mode_init_work(void);
 void sns_flip_init_work(void);
+#if IS_ENABLED(CONFIG_SUPPORT_VIRTUAL_OPTIC)
+void ssc_voptic_inner_panel_on(void);
+#endif
 #endif
 #ifdef CONFIG_VBUS_NOTIFIER
 void sns_vbus_init_work(void);
