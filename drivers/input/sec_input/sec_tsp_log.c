@@ -121,12 +121,8 @@ static ssize_t sec_tsp_sponge_log_read(struct file *file, char __user *buf,
 	return count;
 }
 
-#define TSP_BUF_SIZE 512
-
-void sec_debug_tsp_log_msg(char *msg, char *fmt, ...)
+void sec_debug_tsp_log_msg(char *msg, char *buf)
 {
-	va_list args;
-	char buf[TSP_BUF_SIZE];
 	char tbuf[SEC_TSP_LOG_TIMESTAMP_SIZE];
 	int len = 0;
 	unsigned int idx;
@@ -137,9 +133,6 @@ void sec_debug_tsp_log_msg(char *msg, char *fmt, ...)
 		return;
 
 	mutex_lock(&tsp_log_mutex);
-	va_start(args, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
 
 	idx = sec_tsp_log_index;
 	size = strlen(buf);
@@ -165,10 +158,8 @@ void sec_debug_tsp_log_msg(char *msg, char *fmt, ...)
 }
 EXPORT_SYMBOL(sec_debug_tsp_log_msg);
 
-void sec_debug_tsp_fail_hist(char *msg, char *fmt, ...)
+void sec_debug_tsp_fail_hist(char *msg, char *buf)
 {
-	va_list args;
-	char buf[TSP_BUF_SIZE];
 	char tbuf[SEC_TSP_LOG_TIMESTAMP_SIZE];
 	int len = 0;
 	unsigned int idx;
@@ -179,9 +170,6 @@ void sec_debug_tsp_fail_hist(char *msg, char *fmt, ...)
 		return;
 
 	mutex_lock(&tsp_log_mutex);
-	va_start(args, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
 
 	idx = sec_tsp_fail_hist_index;
 	size = strlen(buf);
@@ -207,10 +195,8 @@ void sec_debug_tsp_fail_hist(char *msg, char *fmt, ...)
 }
 EXPORT_SYMBOL(sec_debug_tsp_fail_hist);
 
-void sec_debug_tsp_raw_data_msg(char mode, char *msg, char *fmt, ...)
+void sec_debug_tsp_raw_data_msg(char mode, char *msg, char *buf)
 {
-	va_list args;
-	char buf[TSP_BUF_SIZE];
 	char tbuf[SEC_TSP_LOG_TIMESTAMP_SIZE];
 	int len = 0;
 	unsigned int idx;
@@ -221,9 +207,6 @@ void sec_debug_tsp_raw_data_msg(char mode, char *msg, char *fmt, ...)
 		return;
 
 	mutex_lock(&tsp_log_mutex);
-	va_start(args, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
 
 	if (mode == MULTI_DEV_MAIN) {
 		idx = sec_tsp_raw_data_index_main;

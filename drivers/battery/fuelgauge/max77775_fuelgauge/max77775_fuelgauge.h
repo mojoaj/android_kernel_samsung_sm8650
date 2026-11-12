@@ -194,16 +194,6 @@ typedef struct max77775_fuelgauge_platform_data {
 } max77775_fuelgauge_platform_data_t;
 
 #define FG_RESET_DATA_COUNT		5
-#define WRL_MODE4_DATA_COUNT	4
-
-#if defined(CONFIG_WRL_MODE4_FG_SETTING)
-struct wrl_mode4_wa {
-	u32 tempnom;
-	u32 misccfg;
-	u32 tempnom_wa;
-	u32 misccfg_wa;
-};
-#endif
 
 struct verify_reg {
 	u16 addr;
@@ -268,6 +258,7 @@ struct max77775_fuelgauge_data {
 
 	bool capacity_max_conv;
 	bool initial_update_of_soc;
+	bool initial_update_of_alert;
 	bool sleep_initial_update_of_soc;
 	struct mutex fg_lock;
 
@@ -301,10 +292,6 @@ struct max77775_fuelgauge_data {
 	struct fg_reset_wa *fg_reset_data;
 	struct verify_reg *verify_selected_reg;
 	unsigned int verify_selected_reg_length;
-#if defined(CONFIG_WRL_MODE4_FG_SETTING)
-	struct wrl_mode4_wa *wrl_mode4_data;
-#endif
-
 	u32 data_ver;
 	bool skip_fg_verify;
 	u32 err_cnt;
@@ -315,6 +302,9 @@ struct max77775_fuelgauge_data {
 	char d_buf[128];
 	int bd_vfocv;
 	int bd_raw_soc;
+
+	int multiplier; /* Multiply capacity values for PASS4 pmic rev */
+	int pmic_ver;
 };
 
 #endif /* __MAX77775_FUELGAUGE_H */

@@ -236,3 +236,23 @@ obj-y				+= uwb/uwb_logger/
 obj-y				+= vibrator/common/inputff/
 obj-y				+= vibrator/common/vib_info/
 obj-y				+= vibrator/cs/cs40l26/
+
+# q6q (from SM-F956B OSRC)
+obj-y				+= battery/limiter/max17333_limiter/
+obj-y				+= input/sec_input/stm_fst2ba61y_i2c/
+obj-y				+= net/dropdump/
+obj-y				+= input/misc/hall/haechitech/
+obj-y				+= kperfmon/
+obj-y				+= battery/fuelgauge/max17333_fuelgauge/
+obj-y				+= battery/limiter/max77775_limiter/
+obj-y				+= net/delayed_sack/
+obj-y				+= battery/battery_auth/ds28e30/
+obj-y				+= battery/charger/sm5461_charger/
+obj-y				+= battery/battery_auth/sle956681/
+obj-y				+= vibrator/cs/cs40l26_mainline/
+obj-y				+= input/sec_input/stm_fst2ca78y_spi/
+obj-y				+= sensors/sx9385/
+obj-y				+= mfd/maxim/max17333/
+obj-y				+= input/sec_input/stm_fst3ca60y_i2c/
+obj-y				+= input/wacom/
+obj-y				+= input/misc/hall/akm/

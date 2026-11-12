@@ -166,14 +166,14 @@ static unsigned long long check_tx_p5200(struct mfc_cmfet *cmfet, union mfc_cmfe
 static unsigned long long check_cmfet_state(struct mfc_cmfet *cmfet, union mfc_cmfet_state *state)
 {
 	switch (state->tx_id) {
-	case TX_ID_UNKNOWN:
+	case WC_PAD_UNKNOWN:
 		return check_tx_unknown(cmfet, state);
-	case TX_ID_P1100_PAD:
+	case WC_PAD_P1100:
 		return check_tx_p1100(cmfet, state);
-	case TX_ID_N5200_V_PAD:
-	case TX_ID_N5200_H_PAD:
+	case WC_PAD_N5200_P:
+	case WC_PAD_N5200_L:
 		return check_tx_n5200(cmfet, state);
-	case TX_ID_P5200_PAD:
+	case WC_PAD_P5200:
 		return check_tx_p5200(cmfet, state);
 	default:
 		break;

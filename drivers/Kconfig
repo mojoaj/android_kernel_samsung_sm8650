@@ -291,4 +291,22 @@ source "drivers/input/sec_input/synaptics/Kconfig" # ADDED BY LEGO AUTOMATICALLY
 source "drivers/battery/common/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/sensors/vl53l8/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/mfd/slsi/s2mpb02/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+source "drivers/battery/limiter/max17333_limiter/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/input/sec_input/stm_fst2ba61y_i2c/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/net/dropdump/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/input/misc/hall/haechitech/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/kperfmon/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/battery/fuelgauge/max17333_fuelgauge/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/battery/limiter/max77775_limiter/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/net/delayed_sack/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/battery/battery_auth/ds28e30/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/battery/charger/sm5461_charger/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/battery/battery_auth/sle956681/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/vibrator/cs/cs40l26_mainline/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/input/sec_input/stm_fst2ca78y_spi/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/sensors/sx9385/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/mfd/maxim/max17333/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/input/sec_input/stm_fst3ca60y_i2c/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/input/wacom/Kconfig" # q6q (from SM-F956B OSRC)
+source "drivers/input/misc/hall/akm/Kconfig" # q6q (from SM-F956B OSRC)
 endmenu

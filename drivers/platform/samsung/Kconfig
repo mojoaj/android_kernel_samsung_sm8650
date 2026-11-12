@@ -21,4 +21,10 @@ config SEC_PLATFORM_E3Q
 	help
 	  Support for Galaxy S24 Ultra
 
+config SEC_PLATFORM_Q6Q
+	bool "Samsung q6q board"
+	select SEC_PLATFORM_SM8650
+	help
+	  Support for Galaxy Z Fold6
+
 endmenu

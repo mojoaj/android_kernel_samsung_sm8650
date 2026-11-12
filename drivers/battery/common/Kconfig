@@ -7,6 +7,31 @@ config DIRECT_CHARGING
 	 it include some charging scenario for direct charging models.
 
 
+config DUAL_BATTERY
+    tristate "support for dual battery model"
+    help
+	  Say Y here to enable support for dual battery
+
+config DUAL_FUELGAUGE
+    tristate "support for dual fuelgauge model"
+    help
+	  Say Y here to enable support for dual fuelgauge
+
+config SEC_DUAL_FG_DYNAMIC_SCALING
+	bool "Ui Soc 100% Prolonging"
+	default n
+	help
+	  Say Y here to enable
+	  Support for UI Soc prolonging.
+	  This is to enable UI Soc prolonging concept.
+
+config SEC_DUAL_FG_SW_VEMPTY
+	bool "dual FG sw vempty"
+	default n
+	help
+	  Say Y here to enable
+	  Support for Dual FG SW Vempty.
+	  This is to enable Dual FG SW Vempty.
 menu "Samsung Battery Common drivers"
 
 config BATTERY_SAMSUNG

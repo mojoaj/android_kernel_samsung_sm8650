@@ -3,6 +3,19 @@ sec-direct-charger-$(CONFIG_DIRECT_CHARGING)	+= sb_pass_through.o sec_direct_cha
 
 ccflags-y := -Wformat
 
+obj-$(CONFIG_DUAL_BATTERY)		+= sec-dual-battery.o
+sec-dual-battery-$(CONFIG_DUAL_BATTERY)	+= sec_dual_battery.o
+
+ifeq ($(CONFIG_SEC_KUNIT), y)
+ GCOV_PROFILE_sec_dual_battery.o := $(CONFIG_SEC_KUNIT)
+endif
+ccflags-y := -Wformat
+
+obj-$(CONFIG_DUAL_FUELGAUGE)		+= sec-dual-fuelgauge.o
+sec-dual-fuelgauge-$(CONFIG_DUAL_FUELGAUGE)	+= sec_dual_fuelgauge.o
+
+ccflags-y := -Wformat
+
 obj-$(CONFIG_SEC_PD)				+= sec_pd.o
 obj-$(CONFIG_BATTERY_SAMSUNG)		+= sb_wireless.o
 
