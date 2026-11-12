@@ -235,7 +235,8 @@ obj-y				+= uwb/
 obj-y				+= uwb/uwb_logger/
 obj-y				+= vibrator/common/inputff/
 obj-y				+= vibrator/common/vib_info/
-obj-y				+= vibrator/cs/cs40l26/
+# q6q uses cs40l26_mainline (same Kconfig symbols)
+# obj-y				+= vibrator/cs/cs40l26/
 
 # q6q (from SM-F956B OSRC)
 obj-y				+= battery/limiter/max17333_limiter/
