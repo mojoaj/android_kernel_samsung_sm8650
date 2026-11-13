@@ -243,7 +243,9 @@ void sec_input_support_feature_parse_dt(struct device *dev)
 
 	pdata->dev = dev;
 	pdata->regulator_boot_on = of_property_read_bool(np, "sec,regulator_boot_on");
-	pdata->support_dex = of_property_read_bool(np, "support_dex_mode");
+	/* q6q: no DeX on LineageOS; the sec_touchpad device it creates makes
+	 * Android show a mouse cursor, so never register it. */
+	pdata->support_dex = false;
 	pdata->support_fod = of_property_read_bool(np, "support_fod");
 	pdata->support_fod_lp_mode = of_property_read_bool(np, "support_fod_lp_mode");
 	pdata->enable_settings_aot = of_property_read_bool(np, "enable_settings_aot");
